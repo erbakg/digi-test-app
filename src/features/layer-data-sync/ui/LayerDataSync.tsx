@@ -1,11 +1,17 @@
-import { useQueries } from "@tanstack/react-query";
-import { useEffect } from "react";
-import { useLayerDataRevision, useLayerStore } from "@/entities/layer/model/hooks";
+import { useQuery } from "@tanstack/react-query";
+import { memo, useEffect, useMemo } from "react";
+import { useLayerState } from "@/entities/layer/model/hooks";
 import { layerQueryOptions } from "@/entities/layer/model/queries";
+import type { LayerRuntimeUpdate } from "@/entities/layer/model/store";
+import { layerStore } from "@/entities/layer/model/store";
 import type { LayerDefinition, LayerStatus } from "@/entities/layer/model/types";
 
 type LayerDataSyncProps = {
   readonly definitions: readonly LayerDefinition[];
+};
+
+type LayerRuntimeProjectionProps = {
+  readonly definition: LayerDefinition;
 };
 
 const getQueryStatus = (
@@ -30,51 +36,69 @@ const getQueryStatus = (
   return isSuccess ? "success" : "loading";
 };
 
-export function LayerDataSync({ definitions }: LayerDataSyncProps) {
-  const store = useLayerStore();
-  const layerRevision = useLayerDataRevision();
-  const snapshot = store.getSnapshot();
-  const queries = useQueries({
-    queries: definitions.map((definition) => {
-      const layerState = snapshot.byId[definition.id];
+const pendingRuntimeUpdates = new Map<string, LayerRuntimeUpdate>();
+let isRuntimeFlushScheduled = false;
 
-      if (layerState === undefined) {
-        throw new Error(`Unknown layer: ${definition.id}`);
-      }
+const enqueueRuntimeUpdate = (update: LayerRuntimeUpdate): void => {
+  pendingRuntimeUpdates.set(update.id, update);
 
-      return layerQueryOptions(definition.id, layerState);
-    }),
+  if (isRuntimeFlushScheduled) {
+    return;
+  }
+
+  isRuntimeFlushScheduled = true;
+  queueMicrotask(() => {
+    isRuntimeFlushScheduled = false;
+    const updates = [...pendingRuntimeUpdates.values()];
+    pendingRuntimeUpdates.clear();
+    layerStore.setRuntimeMany(updates);
   });
+};
+
+const LayerRuntimeProjection = memo(function LayerRuntimeProjection({
+  definition,
+}: LayerRuntimeProjectionProps) {
+  const state = useLayerState(definition.id);
+  const queryOptions = useMemo(
+    () => layerQueryOptions(definition.id, {
+      enabled: state.enabled,
+      requestGeneration: state.requestGeneration,
+    }),
+    [definition.id, state.enabled, state.requestGeneration],
+  );
+  const query = useQuery(queryOptions);
+  const status = getQueryStatus(
+    state.enabled,
+    query.isPending,
+    query.isFetching,
+    query.isError,
+    query.isSuccess,
+  );
+  const queryErrorMessage = query.error instanceof Error
+    ? query.error.message
+    : query.error === null || query.error === undefined
+      ? undefined
+      : "Неизвестная ошибка запроса";
+  const data = state.enabled ? query.data : undefined;
+  const errorMessage = state.enabled ? queryErrorMessage : undefined;
 
   useEffect(() => {
-    definitions.forEach((definition, index) => {
-      const layerState = snapshot.byId[definition.id];
-      const query = queries[index];
-
-      if (layerState === undefined || query === undefined) {
-        return;
-      }
-
-      const status = getQueryStatus(
-        layerState.enabled,
-        query.isPending,
-        query.isFetching,
-        query.isError,
-        query.isSuccess,
-      );
-      const errorMessage = query.error instanceof Error
-        ? query.error.message
-        : query.error === null || query.error === undefined
-          ? undefined
-          : "Неизвестная ошибка запроса";
-
-      store.setRuntime(definition.id, layerState.requestGeneration, {
-        status,
-        data: query.data,
-        errorMessage,
-      });
+    enqueueRuntimeUpdate({
+      id: definition.id,
+      generation: state.requestGeneration,
+      runtime: { status, data, errorMessage },
     });
-  }, [definitions, queries, layerRevision, store]);
+  }, [data, definition.id, errorMessage, state.requestGeneration, status]);
 
   return null;
+});
+
+export function LayerDataSync({ definitions }: LayerDataSyncProps) {
+  return (
+    <>
+      {definitions.map((definition) => (
+        <LayerRuntimeProjection key={definition.id} definition={definition} />
+      ))}
+    </>
+  );
 }

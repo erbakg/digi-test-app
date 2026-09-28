@@ -13,13 +13,17 @@ export type LayerStoreSnapshot = {
   readonly selectedTimeId: TimePointId;
   /** Small signal for consumers that read the latest snapshot imperatively. */
   readonly revision: number;
-  /** Changes only when a layer control or runtime projection changes. */
-  readonly layerRevision: number;
   /** Null means a global change, for example selected time or reset. */
   readonly lastChangedLayerId: LayerId | null;
 };
 
 type LayerUpdater = (current: LayerState) => LayerState;
+
+export type LayerRuntimeUpdate = {
+  readonly id: LayerId;
+  readonly generation: number;
+  readonly runtime: LayerRuntimeState;
+};
 
 const createInitialSnapshot = (
   definitions: readonly LayerDefinition[],
@@ -42,7 +46,6 @@ const createInitialSnapshot = (
     byId,
     selectedTimeId: DEFAULT_TIME_POINT_ID,
     revision: 0,
-    layerRevision: 0,
     lastChangedLayerId: null,
   };
 };
@@ -60,6 +63,7 @@ export type LayerStore = {
     generation: number,
     runtime: LayerRuntimeState,
   ) => void;
+  readonly setRuntimeMany: (updates: readonly LayerRuntimeUpdate[]) => void;
   readonly reset: () => void;
 };
 
@@ -71,7 +75,10 @@ export const createLayerStore = (
     createInitialSnapshot(definitions),
   );
 
-  const updateLayer = (id: LayerId, updater: LayerUpdater): void => {
+  const updateLayer = (
+    id: LayerId,
+    updater: LayerUpdater,
+  ): void => {
     const snapshot = vedro.get();
     const current = snapshot.byId[id];
 
@@ -96,8 +103,58 @@ export const createLayerStore = (
         [id]: next,
       },
       revision: snapshot.revision + 1,
-      layerRevision: snapshot.layerRevision + 1,
       lastChangedLayerId: id,
+    });
+  };
+
+  const setRuntimeMany = (updates: readonly LayerRuntimeUpdate[]): void => {
+    if (updates.length === 0) {
+      return;
+    }
+
+    const snapshot = vedro.get();
+    let nextById: Record<LayerId, LayerState> | null = null;
+    let changedCount = 0;
+    let changedLayerId: LayerId | null = null;
+
+    for (const { id, generation, runtime } of updates) {
+      const current = nextById?.[id] ?? snapshot.byId[id];
+
+      if (current === undefined || current.requestGeneration !== generation) {
+        continue;
+      }
+
+      const hasRuntimeChanged = current.status !== runtime.status
+        || current.data !== runtime.data
+        || current.errorMessage !== runtime.errorMessage;
+
+      if (!hasRuntimeChanged) {
+        continue;
+      }
+
+      const mutableById: Record<LayerId, LayerState> = nextById ?? { ...snapshot.byId };
+      nextById = mutableById;
+      mutableById[id] = {
+        ...current,
+        ...runtime,
+        version: current.version + 1,
+      };
+      changedCount += 1;
+      changedLayerId = changedCount === 1 ? id : null;
+    }
+
+    if (changedCount === 0) {
+      return;
+    }
+
+    if (nextById === null) {
+      return;
+    }
+
+    vedro.dispatch({
+      byId: nextById,
+      revision: snapshot.revision + 1,
+      lastChangedLayerId: changedCount === 1 ? changedLayerId : null,
     });
   };
 
@@ -170,25 +227,9 @@ export const createLayerStore = (
       });
     },
     setRuntime: (id: LayerId, generation: number, runtime: LayerRuntimeState): void => {
-      updateLayer(id, (current) => {
-        if (current.requestGeneration !== generation) {
-          return current;
-        }
-
-        if (
-          current.status === runtime.status
-          && current.data === runtime.data
-          && current.errorMessage === runtime.errorMessage
-        ) {
-          return current;
-        }
-
-        return {
-          ...current,
-          ...runtime,
-        };
-      });
+      setRuntimeMany([{ id, generation, runtime }]);
     },
+    setRuntimeMany,
     reset: (): void => {
       vedro.dispatch(createInitialSnapshot(definitions));
     },

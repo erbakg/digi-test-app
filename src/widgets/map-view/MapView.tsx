@@ -136,6 +136,7 @@ export function MapView({ definitions }: MapViewProps) {
     }
 
     let isDisposed = false;
+    let hasMapError = false;
     setMapRuntime(INITIAL_MAP_RUNTIME_STATE);
 
     void import("maplibre-gl").then((maplibre) => {
@@ -164,8 +165,29 @@ export function MapView({ definitions }: MapViewProps) {
       mapRef.current = map;
       previousStateRef.current = undefined;
 
+      map.on("error", (event) => {
+        if (isDisposed || mapReadyRef.current) {
+          return;
+        }
+
+        const sourceId = "sourceId" in event && typeof event.sourceId === "string"
+          ? event.sourceId
+          : undefined;
+
+        if (sourceId === "osm") {
+          return;
+        }
+
+        hasMapError = true;
+        setMapRuntime((current) => ({
+          ...current,
+          ready: false,
+          error: true,
+        }));
+      });
+
       map.on("load", () => {
-        if (isDisposed) {
+        if (isDisposed || hasMapError) {
           return;
         }
 

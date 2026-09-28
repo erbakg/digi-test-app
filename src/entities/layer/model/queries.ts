@@ -1,11 +1,16 @@
 import { fetchLayerData } from "../api/mockApi";
 import { useLayerState } from "./hooks";
-import type { LayerId, LayerState } from "./types";
+import type { LayerId } from "./types";
+
+export type LayerQueryState = {
+  readonly enabled: boolean;
+  readonly requestGeneration: number;
+};
 
 export const layerQueryKey = (id: LayerId, generation: number) =>
   ["map-layer", id, generation] as const;
 
-export const layerQueryOptions = (id: LayerId, state: LayerState) => ({
+export const layerQueryOptions = (id: LayerId, state: LayerQueryState) => ({
   queryKey: layerQueryKey(id, state.requestGeneration),
   queryFn: ({ signal }: { readonly signal: AbortSignal }) => fetchLayerData(id, signal),
   enabled: state.enabled,

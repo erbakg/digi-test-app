@@ -1,5 +1,5 @@
 import { createVedro } from "vedro";
-import { type PropsWithChildren } from "react";
+import { useSyncExternalStore, type PropsWithChildren } from "react";
 import { layerStore } from "./store";
 import type { LayerStoreSnapshot } from "./store";
 import type { TimePointId } from "./time";
@@ -16,12 +16,13 @@ export function useLayerStore() {
 }
 
 export function useLayerState(id: LayerId): LayerState {
-  const layerVersion = layerVedro.useSelector(
-    (snapshot) => snapshot.byId[id]?.version,
+  const layer = useSyncExternalStore(
+    layerStore.subscribe,
+    () => layerStore.getSnapshot().byId[id],
+    () => layerStore.getSnapshot().byId[id],
   );
-  const layer = layerStore.getSnapshot().byId[id];
 
-  if (layer === undefined || layerVersion === undefined) {
+  if (layer === undefined) {
     throw new Error(`Unknown layer: ${id}`);
   }
 
@@ -35,10 +36,6 @@ export function useLayerStoreSignal(): LayerStoreSignal {
     revision: snapshot.revision,
     lastChangedLayerId: snapshot.lastChangedLayerId,
   }));
-}
-
-export function useLayerDataRevision(): number {
-  return layerVedro.useSelector((snapshot) => snapshot.layerRevision);
 }
 
 export function useSelectedTime(): TimePointId {

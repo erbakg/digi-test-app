@@ -62,6 +62,64 @@ describe("layerStore", () => {
     expect(layerStore.getSnapshot().byId[temperatureId]?.status).toBe("success");
   });
 
+  it("applies multiple runtime projections in one immutable update", () => {
+    const definitions = createLayerDefinitions(3);
+    const stressStore = createLayerStore(definitions);
+    const temperatureId = definitions[0]?.id;
+    const windId = definitions[1]?.id;
+    const staleId = definitions[2]?.id;
+
+    if (temperatureId === undefined || windId === undefined || staleId === undefined) {
+      throw new Error("Test definitions were not initialized");
+    }
+
+    stressStore.setEnabled(temperatureId, true);
+    stressStore.setEnabled(windId, true);
+    stressStore.setEnabled(staleId, true);
+    const staleGeneration = stressStore.getSnapshot().byId[staleId]?.requestGeneration;
+    stressStore.retry(staleId);
+    const temperatureGeneration = stressStore.getSnapshot().byId[temperatureId]?.requestGeneration;
+    const windGeneration = stressStore.getSnapshot().byId[windId]?.requestGeneration;
+
+    if (
+      temperatureGeneration === undefined
+      || windGeneration === undefined
+      || staleGeneration === undefined
+    ) {
+      throw new Error("Test generations were not initialized");
+    }
+
+    let notificationCount = 0;
+    const unsubscribe = stressStore.subscribe(() => {
+      notificationCount += 1;
+    });
+
+    stressStore.setRuntimeMany([
+      {
+        id: temperatureId,
+        generation: temperatureGeneration,
+        runtime: { status: "success", data: undefined, errorMessage: undefined },
+      },
+      {
+        id: windId,
+        generation: windGeneration,
+        runtime: { status: "success", data: undefined, errorMessage: undefined },
+      },
+      {
+        id: staleId,
+        generation: staleGeneration,
+        runtime: { status: "success", data: undefined, errorMessage: undefined },
+      },
+    ]);
+    unsubscribe();
+
+    expect(notificationCount).toBe(1);
+    expect(stressStore.getSnapshot().byId[temperatureId]?.status).toBe("success");
+    expect(stressStore.getSnapshot().byId[windId]?.status).toBe("success");
+    expect(stressStore.getSnapshot().byId[staleId]?.status).toBe("loading");
+    expect(stressStore.getSnapshot().lastChangedLayerId).toBe(null);
+  });
+
   it("clamps opacity to the valid range", () => {
     const insolationId = toLayerId("insolation");
     layerStore.setOpacity(insolationId, 4);
