@@ -1,10 +1,8 @@
-import { useQueries } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, Map as MapInstance } from "maplibre-gl";
 import { getMock3dObject, getMockGeometry } from "@/entities/layer/api/mockApi";
 import { useAllLayerState } from "@/entities/layer/model/hooks";
-import { layerQueryOptions } from "@/entities/layer/model/queries";
 import { getLayerDataPoint, type LayerData, type LayerDefinition, type LayerId } from "@/entities/layer/model/types";
 import type { LayerStoreSnapshot } from "@/entities/layer/model/store";
 
@@ -18,8 +16,6 @@ const THREE_D_OUTLINE_ID = "mock-3d-weather-station-outline";
 type MapViewProps = {
   readonly definitions: readonly LayerDefinition[];
 };
-
-type LayerDataById = ReadonlyMap<LayerId, LayerData>;
 
 const getIntensity = (data: LayerData | undefined, timeId: LayerStoreSnapshot["selectedTimeId"]): number => {
   const point = getLayerDataPoint(data, timeId);
@@ -44,30 +40,51 @@ const syncMapLayers = (
   map: MapInstance,
   definitions: readonly LayerDefinition[],
   snapshot: LayerStoreSnapshot,
-  dataById: LayerDataById,
+  previousSnapshot: LayerStoreSnapshot | undefined,
 ): void => {
+  const isInitialSync = previousSnapshot === undefined;
+  const timeChanged = isInitialSync || previousSnapshot.selectedTimeId !== snapshot.selectedTimeId;
+
   for (const definition of definitions) {
     const layerState = snapshot.byId[definition.id];
-    const layerData = dataById.get(definition.id);
-    const selectedPoint = getLayerDataPoint(layerData, snapshot.selectedTimeId);
-    const isVisible = layerState?.enabled ?? false;
-    const visibility = isVisible ? 1 : 0;
-    const opacity = layerState?.opacity ?? 0.72;
-    const source = map.getSource(MAP_SOURCE_ID(definition.id)) as GeoJSONSource | undefined;
+    const previousLayerState = previousSnapshot?.byId[definition.id];
 
-    if (source !== undefined) {
+    if (layerState === undefined) {
+      continue;
+    }
+
+    const layerChanged = isInitialSync || previousLayerState !== layerState;
+    const dataChanged = isInitialSync || previousLayerState?.data !== layerState.data;
+
+    if (!layerChanged && !timeChanged) {
+      continue;
+    }
+
+    const selectedPoint = getLayerDataPoint(layerState.data, snapshot.selectedTimeId);
+    const isVisible = layerState.enabled;
+    const visibility = isVisible ? 1 : 0;
+    const opacity = layerState.opacity;
+    const source = map.getSource(MAP_SOURCE_ID(definition.id)) as GeoJSONSource | undefined;
+    const hasFillLayer = map.getLayer(MAP_FILL_ID(definition.id)) !== undefined;
+    const hasLineLayer = map.getLayer(MAP_LINE_ID(definition.id)) !== undefined;
+    const shouldUpdateData = timeChanged || dataChanged;
+    const shouldUpdateColor = layerChanged || timeChanged;
+
+    if (source !== undefined && shouldUpdateData) {
       source.setData(selectedPoint?.geometry ?? getMockGeometry(definition.id, snapshot.selectedTimeId));
     }
 
-    if (map.getLayer(MAP_FILL_ID(definition.id)) !== undefined) {
+    if (hasFillLayer && shouldUpdateColor) {
       map.setPaintProperty(
         MAP_FILL_ID(definition.id),
         "fill-color",
-        getDataColor(definition, getIntensity(layerData, snapshot.selectedTimeId)),
+        getDataColor(definition, getIntensity(layerState.data, snapshot.selectedTimeId)),
       );
+    }
+    if (hasFillLayer && layerChanged) {
       map.setPaintProperty(MAP_FILL_ID(definition.id), "fill-opacity", visibility * opacity * 0.6);
     }
-    if (map.getLayer(MAP_LINE_ID(definition.id)) !== undefined) {
+    if (hasLineLayer && layerChanged) {
       map.setPaintProperty(MAP_LINE_ID(definition.id), "line-opacity", visibility * opacity);
     }
   }
@@ -78,33 +95,10 @@ export function MapView({ definitions }: MapViewProps) {
   const mapRef = useRef<MapInstance | null>(null);
   const mapReadyRef = useRef(false);
   const state = useAllLayerState();
-  const layerQueries = useQueries({
-    queries: definitions.map((definition) => {
-      const layerState = state.byId[definition.id];
+  const latestStateRef = useRef(state);
+  const previousStateRef = useRef<LayerStoreSnapshot | undefined>(undefined);
 
-      if (layerState === undefined) {
-        throw new Error(`Unknown layer: ${definition.id}`);
-      }
-
-      return layerQueryOptions(definition.id, layerState);
-    }),
-  });
-  const dataById = useMemo(() => {
-    const nextDataById = new Map<LayerId, LayerData>();
-
-    definitions.forEach((definition, index) => {
-      const data = layerQueries[index]?.data;
-
-      if (data !== undefined) {
-        nextDataById.set(definition.id, data);
-      }
-    });
-
-    return nextDataById;
-  }, [definitions, layerQueries]);
-  const latestStateRef = useRef({ state, dataById });
-
-  latestStateRef.current = { state, dataById };
+  latestStateRef.current = state;
 
   useEffect(() => {
     if (mapContainerRef.current === null) {
@@ -130,12 +124,13 @@ export function MapView({ definitions }: MapViewProps) {
     });
 
     mapRef.current = map;
+    previousStateRef.current = undefined;
 
     map.on("load", () => {
       for (const definition of definitions) {
         map.addSource(MAP_SOURCE_ID(definition.id), {
           type: "geojson",
-          data: getMockGeometry(definition.id, latestStateRef.current.state.selectedTimeId),
+          data: getMockGeometry(definition.id, latestStateRef.current.selectedTimeId),
         });
         map.addLayer({
           id: MAP_FILL_ID(definition.id),
@@ -189,16 +184,13 @@ export function MapView({ definitions }: MapViewProps) {
       });
 
       mapReadyRef.current = true;
-      syncMapLayers(
-        map,
-        definitions,
-        latestStateRef.current.state,
-        latestStateRef.current.dataById,
-      );
+      syncMapLayers(map, definitions, latestStateRef.current, undefined);
+      previousStateRef.current = latestStateRef.current;
     });
 
     return () => {
       mapReadyRef.current = false;
+      previousStateRef.current = undefined;
       map.remove();
       mapRef.current = null;
     };
@@ -211,8 +203,9 @@ export function MapView({ definitions }: MapViewProps) {
       return;
     }
 
-    syncMapLayers(map, definitions, state, dataById);
-  }, [definitions, state, dataById]);
+    syncMapLayers(map, definitions, state, previousStateRef.current);
+    previousStateRef.current = state;
+  }, [definitions, state]);
 
   return (
     <section className="map-panel" aria-label="Карта с активными слоями">

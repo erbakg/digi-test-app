@@ -25,7 +25,13 @@ export type LayerState = {
   readonly opacity: number;
   /** Monotonically increasing generation. It makes every enable/retry a new query. */
   readonly requestGeneration: number;
+  /** Query projection kept in Vedro for map/timeline/chart synchronization. */
+  readonly status: LayerStatus;
+  readonly data: LayerData | undefined;
+  readonly errorMessage: string | undefined;
 };
+
+export type LayerRuntimeState = Pick<LayerState, "status" | "data" | "errorMessage">;
 
 export type LayerData = {
   readonly layerId: LayerId;

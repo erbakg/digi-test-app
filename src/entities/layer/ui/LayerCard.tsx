@@ -1,6 +1,6 @@
 import { memo, type ChangeEvent, type CSSProperties } from "react";
 import { useLayerStore, useSelectedTime } from "../model/hooks";
-import { useLayerQuery } from "../model/queries";
+import { useLayerRuntime } from "../model/queries";
 import { getLayerDataPoint, type LayerDefinition } from "../model/types";
 import { StatusPill } from "./StatusPill";
 
@@ -23,11 +23,11 @@ const formatLoadedAt = (value: string | undefined): string => {
 export const LayerCard = memo(function LayerCard({ definition }: LayerCardProps) {
   const store = useLayerStore();
   const selectedTimeId = useSelectedTime();
-  const { state, data, error, status } = useLayerQuery(definition.id);
+  const { state, data, errorMessage: queryErrorMessage, status } = useLayerRuntime(definition.id);
   const isLoading = status === "loading";
   const hasError = status === "error";
   const hasData = data !== undefined;
-  const errorMessage = error instanceof Error ? error.message : "Неизвестная ошибка запроса";
+  const errorMessage = queryErrorMessage ?? "Неизвестная ошибка запроса";
   const metadata = hasData ? formatLoadedAt(data.loadedAt) : "ожидание запроса";
   const selectedPoint = getLayerDataPoint(data, selectedTimeId);
   const hasSelectedPoint = selectedPoint !== undefined;
@@ -68,7 +68,7 @@ export const LayerCard = memo(function LayerCard({ definition }: LayerCardProps)
           aria-checked={state.enabled}
           onClick={() => store.setEnabled(definition.id, !state.enabled)}
           data-testid={`layer-toggle-${definition.id}`}
-          aria-label={`Включить слой «${definition.title}»`}
+          aria-label={`${state.enabled ? "Выключить" : "Включить"} слой «${definition.title}»`}
         />
       </label>
 

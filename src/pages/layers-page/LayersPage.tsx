@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import type { LayerDefinition } from "@/entities/layer/model/types";
+import { LayerDataSync } from "@/features/layer-data-sync/ui/LayerDataSync";
 import { LayerList } from "@/widgets/layer-list/LayerList";
 import { Timeline } from "@/widgets/timeline/Timeline";
 
@@ -20,6 +21,7 @@ export function LayersPage({
 
   return (
     <div className="app-shell">
+      <LayerDataSync definitions={definitions} />
       <header className="app-header">
         <div className="brand-lockup">
           <span className="brand-mark" aria-hidden="true">◒</span>

@@ -1,7 +1,12 @@
 import Vedro from "vedro";
 import { createLayerDefinitions } from "./config";
 import { DEFAULT_TIME_POINT_ID, type TimePointId } from "./time";
-import type { LayerDefinition, LayerId, LayerState } from "./types";
+import type {
+  LayerDefinition,
+  LayerId,
+  LayerRuntimeState,
+  LayerState,
+} from "./types";
 
 export type LayerStoreSnapshot = {
   readonly byId: Readonly<Record<LayerId, LayerState>>;
@@ -20,6 +25,9 @@ const createInitialSnapshot = (
       enabled: false,
       opacity: 0.72,
       requestGeneration: 0,
+      status: "disabled",
+      data: undefined,
+      errorMessage: undefined,
     };
   }
 
@@ -37,6 +45,7 @@ export type LayerStore = {
   readonly retry: (id: LayerId) => void;
   readonly setOpacity: (id: LayerId, opacity: number) => void;
   readonly setSelectedTime: (timeId: TimePointId) => void;
+  readonly setRuntime: (id: LayerId, runtime: LayerRuntimeState) => void;
   readonly reset: () => void;
 };
 
@@ -95,6 +104,9 @@ export const createLayerStore = (
           ...current,
           enabled,
           requestGeneration: current.requestGeneration + 1,
+          status: enabled ? "loading" : "disabled",
+          data: undefined,
+          errorMessage: undefined,
         };
       });
     },
@@ -103,6 +115,9 @@ export const createLayerStore = (
         ...current,
         enabled: true,
         requestGeneration: current.requestGeneration + 1,
+        status: "loading",
+        data: undefined,
+        errorMessage: undefined,
       }));
     },
     setOpacity: (id: LayerId, opacity: number): void => {
@@ -124,8 +139,24 @@ export const createLayerStore = (
 
       vedro.dispatch({ selectedTimeId: timeId });
     },
+    setRuntime: (id: LayerId, runtime: LayerRuntimeState): void => {
+      updateLayer(id, (current) => {
+        if (
+          current.status === runtime.status
+          && current.data === runtime.data
+          && current.errorMessage === runtime.errorMessage
+        ) {
+          return current;
+        }
+
+        return {
+          ...current,
+          ...runtime,
+        };
+      });
+    },
     reset: (): void => {
-      vedro.dispatch({ byId: createInitialSnapshot(definitions).byId });
+      vedro.dispatch(createInitialSnapshot(definitions));
     },
   };
 };

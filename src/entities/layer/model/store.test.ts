@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createLayerDefinitions } from "./config";
 import { createLayerStore, layerStore } from "./store";
-import { toTimePointId } from "./time";
+import { DEFAULT_TIME_POINT_ID, toTimePointId } from "./time";
 import { toLayerId } from "./types";
 
 describe("layerStore", () => {
@@ -47,6 +47,16 @@ describe("layerStore", () => {
     layerStore.setSelectedTime(noon);
 
     expect(layerStore.getSnapshot().selectedTimeId).toBe(noon);
+  });
+
+  it("resets selected time together with layer state", () => {
+    layerStore.setSelectedTime(toTimePointId("14:00"));
+    layerStore.setEnabled(toLayerId("temperature"), true);
+
+    layerStore.reset();
+
+    expect(layerStore.getSnapshot().selectedTimeId).toBe(DEFAULT_TIME_POINT_ID);
+    expect(layerStore.getSnapshot().byId[toLayerId("temperature")]?.enabled).toBe(false);
   });
 
   it("keeps 120 layer records manageable for bulk updates", () => {

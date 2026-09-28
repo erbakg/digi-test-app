@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import { getLayerDefinition } from "@/entities/layer/model/config";
 import { useLayerStore, useSelectedTime } from "@/entities/layer/model/hooks";
-import { useLayerQuery } from "@/entities/layer/model/queries";
+import { useLayerRuntime } from "@/entities/layer/model/queries";
 import { getLayerDataPoint, toLayerId } from "@/entities/layer/model/types";
 import { getTimePoint, TIME_POINTS } from "@/entities/layer/model/time";
 
@@ -30,20 +30,20 @@ const insolationDefinition = getLayerDefinition(toLayerId("insolation"));
 export function LayerChart() {
   const store = useLayerStore();
   const selectedTimeId = useSelectedTime();
-  const temperatureQuery = useLayerQuery(temperatureDefinition.id);
-  const windQuery = useLayerQuery(windDefinition.id);
-  const insolationQuery = useLayerQuery(insolationDefinition.id);
-  const queries = [temperatureQuery, windQuery, insolationQuery];
-  const hasData = queries.some(({ data }) => data !== undefined);
-  const isLoading = queries.some(({ status }) => status === "loading");
+  const temperatureRuntime = useLayerRuntime(temperatureDefinition.id);
+  const windRuntime = useLayerRuntime(windDefinition.id);
+  const insolationRuntime = useLayerRuntime(insolationDefinition.id);
+  const runtimes = [temperatureRuntime, windRuntime, insolationRuntime];
+  const hasData = runtimes.some(({ data }) => data !== undefined);
+  const isLoading = runtimes.some(({ status }) => status === "loading");
   const selectedTime = getTimePoint(selectedTimeId);
 
   const chartData: readonly ChartRow[] = TIME_POINTS.map((timePoint) => ({
     timeId: timePoint.id,
     label: timePoint.label,
-    temperature: getLayerDataPoint(temperatureQuery.data, timePoint.id)?.value,
-    wind: getLayerDataPoint(windQuery.data, timePoint.id)?.value,
-    insolation: getLayerDataPoint(insolationQuery.data, timePoint.id)?.value,
+    temperature: getLayerDataPoint(temperatureRuntime.data, timePoint.id)?.value,
+    wind: getLayerDataPoint(windRuntime.data, timePoint.id)?.value,
+    insolation: getLayerDataPoint(insolationRuntime.data, timePoint.id)?.value,
   }));
 
   const handleChartClick = (chartState: { readonly activeLabel?: unknown } | undefined): void => {
