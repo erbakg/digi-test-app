@@ -71,12 +71,16 @@ src/
 
 - MapLibre отвечает только за визуализацию карты и GeoJSON overlay. Он не хранит бизнес-состояние React-приложения.
 - TanStack Query отвечает за server state: запуск запроса при включении, `loading/success/error`, abort signal, отсутствие автоматических retry и кэширование.
-- UI-store содержит только клиентское состояние: `enabled`, `opacity` и `requestGeneration`.
+- npm `vedro@1.1.0` отвечает за UI-store: `Vedro` хранит только клиентское состояние (`enabled`, `opacity`, `requestGeneration`), а `createVedro().useSelector` подписывает компонент на минимальный срез состояния.
 - `requestGeneration` входит в query key. Любое включение или retry создаёт новое поколение запроса, поэтому устаревший ответ не может записать результат поверх более нового состояния.
-- Store — внешний типизированный store на `useSyncExternalStore`. Карточка подписывается только на snapshot своего слоя; изменение opacity или статуса соседнего слоя не заставляет её перерисовываться.
-- `LayerCard` обёрнут в `memo`, а конфигурация слоёв является статической. Добавление 5–100 слоёв сводится к добавлению конфигурации, без копирования компонентов.
-- Vedro — это e2e-тестовый фреймворк Python, а не state manager. Его сценарий проверяет загрузку, retry, opacity и быстрые переключения через Playwright.
+- Карточка подписывается через selector только на snapshot своего слоя; изменение opacity или статуса соседнего слоя не заставляет её перерисовываться. `LayerCard` дополнительно обёрнут в `memo`.
+- Конфигурация слоёв является статической. Добавление 5–100 слоёв сводится к добавлению конфигурации, без копирования компонентов.
+- Python Vedro + `vedro-pw` используются отдельно для e2e-сценариев через Playwright: загрузка, retry, opacity, быстрые переключения и 120 параллельных запросов.
 - Recharts используется только для отдельного аналитического виджета. Если графики не нужны в продукте, его можно удалить без влияния на GIS-часть.
+
+### Проверка npm vedro
+
+Перед установкой `vedro@1.1.0` был проверен npm metadata и распакованный tarball: лицензия MIT, 27 файлов, около 46 KB, нет runtime-зависимостей, `postinstall`/`install`-скриптов, сетевого или файлового кода в runtime. Изолированный `npm audit` для `vedro` и его peer-зависимости React не нашёл уязвимостей. Общий audit проекта показывает две moderate dev-only уязвимости в Vitest 3 (`@vitest/mocker`, path traversal); production-зависимости чистые, а исправление требует major upgrade Vitest.
 
 ## Race condition
 
@@ -92,7 +96,7 @@ src/
 В работе использовался OpenAI Codex в Codex Desktop:
 
 - помог спроектировать FSD-структуру и разделить UI state, server state и GIS-рендеринг;
-- подготовил типизированный store на `useSyncExternalStore`, интеграцию TanStack Query и защиту от race condition через `requestGeneration`;
+- подготовил типизированный store на npm `vedro`, интеграцию TanStack Query и защиту от race condition через `requestGeneration`;
 - помог реализовать MapLibre-карту, Recharts-виджет и mock API с детерминированным сценарием ошибки;
 - подготовил unit-тесты, Vedro + Playwright e2e-сценарии и stress-тест на 5/25/100/120 слоёв;
 - выполнил code review: убрал повторяющиеся UI-условия, проверил отсутствие `any`, production build, `npm audit` и поведение интерфейса в браузере.

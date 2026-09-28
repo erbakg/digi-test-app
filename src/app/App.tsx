@@ -1,7 +1,6 @@
 import { AppProviders } from "@/app/providers/AppProviders";
 import { createLayerDefinitions } from "@/entities/layer/model/config";
 import { LayerStoreProvider } from "@/entities/layer/model/hooks";
-import { createLayerStore } from "@/entities/layer/model/store";
 import { LayersPage } from "@/pages/layers-page/LayersPage";
 import { useMemo } from "react";
 
@@ -16,11 +15,10 @@ export function App() {
     () => createLayerDefinitions(requestedLayerCount),
     [requestedLayerCount],
   );
-  const store = useMemo(() => createLayerStore(definitions), [definitions]);
 
   return (
     <AppProviders>
-      <LayerStoreProvider store={store}>
+      <LayerStoreProvider>
         <LayersPage definitions={definitions} />
       </LayerStoreProvider>
     </AppProviders>

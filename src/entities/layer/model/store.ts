@@ -1,14 +1,16 @@
-import { LAYER_DEFINITIONS } from "./config";
+import Vedro from "vedro";
+import { createLayerDefinitions } from "./config";
 import type { LayerDefinition, LayerId, LayerState } from "./types";
 
 export type LayerStoreSnapshot = {
   readonly byId: Readonly<Record<LayerId, LayerState>>;
 };
 
-type Listener = () => void;
 type LayerUpdater = (current: LayerState) => LayerState;
 
-const createInitialSnapshot = (definitions: readonly LayerDefinition[]): LayerStoreSnapshot => {
+const createInitialSnapshot = (
+  definitions: readonly LayerDefinition[],
+): LayerStoreSnapshot => {
   const byId = {} as Record<LayerId, LayerState>;
 
   for (const { id } of definitions) {
@@ -23,19 +25,25 @@ const createInitialSnapshot = (definitions: readonly LayerDefinition[]): LayerSt
 };
 
 export type LayerStore = {
+  readonly vedro: Vedro<LayerStoreSnapshot>;
   readonly getSnapshot: () => LayerStoreSnapshot;
-  readonly subscribe: (listener: Listener) => () => void;
+  readonly subscribe: (listener: () => void) => () => void;
   readonly setEnabled: (id: LayerId, enabled: boolean) => void;
   readonly retry: (id: LayerId) => void;
   readonly setOpacity: (id: LayerId, opacity: number) => void;
   readonly reset: () => void;
 };
 
-export const createLayerStore = (definitions: readonly LayerDefinition[]): LayerStore => {
-  let snapshot = createInitialSnapshot(definitions);
-  const listeners = new Set<Listener>();
+export const createLayerStore = (
+  definitions: readonly LayerDefinition[],
+): LayerStore => {
+  const vedro = new Vedro(
+    "layer-store",
+    createInitialSnapshot(definitions),
+  );
 
   const updateLayer = (id: LayerId, updater: LayerUpdater): void => {
+    const snapshot = vedro.get();
     const current = snapshot.byId[id];
 
     if (current === undefined) {
@@ -48,23 +56,28 @@ export const createLayerStore = (definitions: readonly LayerDefinition[]): Layer
       return;
     }
 
-    snapshot = {
+    vedro.dispatch({
       byId: {
         ...snapshot.byId,
         [id]: next,
       },
-    };
-
-    for (const listener of listeners) {
-      listener();
-    }
+    });
   };
 
   return {
-    getSnapshot: (): LayerStoreSnapshot => snapshot,
-    subscribe: (listener: Listener): (() => void) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
+    vedro,
+    getSnapshot: (): LayerStoreSnapshot => vedro.get(),
+    subscribe: (listener: () => void): (() => void) => {
+      let isInitialNotification = true;
+
+      return vedro.on("@state", () => {
+        if (isInitialNotification) {
+          isInitialNotification = false;
+          return;
+        }
+
+        listener();
+      });
     },
     setEnabled: (id: LayerId, enabled: boolean): void => {
       updateLayer(id, (current) => {
@@ -99,12 +112,14 @@ export const createLayerStore = (definitions: readonly LayerDefinition[]): Layer
       );
     },
     reset: (): void => {
-      snapshot = createInitialSnapshot(definitions);
-      for (const listener of listeners) {
-        listener();
-      }
+      vedro.dispatch({ byId: createInitialSnapshot(definitions).byId });
     },
   };
 };
 
-export const layerStore = createLayerStore(LAYER_DEFINITIONS);
+// The UI uses one shared store sized for the configured stress ceiling. The
+// rendered definitions remain dynamic, so the default view still subscribes to
+// only the three domain layers while the same store supports 100+ layers.
+export const layerStore = createLayerStore(
+  createLayerDefinitions(500),
+);

@@ -1,51 +1,28 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useSyncExternalStore,
-  type PropsWithChildren,
-} from "react";
-import { layerStore, type LayerStore } from "./store";
+import { createVedro } from "vedro";
+import { type PropsWithChildren } from "react";
+import { layerStore } from "./store";
 import type { LayerId, LayerState } from "./types";
 
-const LayerStoreContext = createContext<LayerStore>(layerStore);
+const layerVedro = createVedro(layerStore.vedro);
 
-export function LayerStoreProvider({
-  store,
-  children,
-}: PropsWithChildren<{ readonly store: LayerStore }>) {
-  return <LayerStoreContext.Provider value={store}>{children}</LayerStoreContext.Provider>;
+export function LayerStoreProvider({ children }: PropsWithChildren) {
+  return <layerVedro.Provider>{children}</layerVedro.Provider>;
 }
 
-export function useLayerStore(): LayerStore {
-  return useContext(LayerStoreContext);
+export function useLayerStore() {
+  return layerStore;
 }
 
 export function useLayerState(id: LayerId): LayerState {
-  const store = useLayerStore();
-  const getLayerSnapshot = useCallback(() => {
-    const layer = store.getSnapshot().byId[id];
+  const layer = layerVedro.useSelector((snapshot) => snapshot.byId[id]);
 
-    if (layer === undefined) {
-      throw new Error(`Unknown layer: ${id}`);
-    }
+  if (layer === undefined) {
+    throw new Error(`Unknown layer: ${id}`);
+  }
 
-    return layer;
-  }, [id, store]);
-
-  return useSyncExternalStore(
-    store.subscribe,
-    getLayerSnapshot,
-    getLayerSnapshot,
-  );
+  return layer;
 }
 
 export function useAllLayerState() {
-  const store = useLayerStore();
-
-  return useSyncExternalStore(
-    store.subscribe,
-    store.getSnapshot,
-    store.getSnapshot,
-  );
+  return layerVedro.useSelector((snapshot) => snapshot);
 }
