@@ -1,6 +1,6 @@
 import Vedro from "vedro";
 import { createLayerDefinitions } from "./config";
-import { DEFAULT_TIME_POINT_ID, type TimePointId } from "./time";
+import { DEFAULT_TIME_POINT_ID, isTimePointId, type TimePointId } from "./time";
 import type {
   LayerDefinition,
   LayerId,
@@ -15,6 +15,8 @@ export type LayerStoreSnapshot = {
   readonly revision: number;
   /** Changes only when a layer control or runtime projection changes. */
   readonly layerRevision: number;
+  /** Null means a global change, for example selected time or reset. */
+  readonly lastChangedLayerId: LayerId | null;
 };
 
 type LayerUpdater = (current: LayerState) => LayerState;
@@ -41,6 +43,7 @@ const createInitialSnapshot = (
     selectedTimeId: DEFAULT_TIME_POINT_ID,
     revision: 0,
     layerRevision: 0,
+    lastChangedLayerId: null,
   };
 };
 
@@ -94,6 +97,7 @@ export const createLayerStore = (
       },
       revision: snapshot.revision + 1,
       layerRevision: snapshot.layerRevision + 1,
+      lastChangedLayerId: id,
     });
   };
 
@@ -151,6 +155,10 @@ export const createLayerStore = (
       );
     },
     setSelectedTime: (timeId: TimePointId): void => {
+      if (!isTimePointId(timeId)) {
+        throw new Error(`Unknown time point: ${timeId}`);
+      }
+
       if (vedro.get().selectedTimeId === timeId) {
         return;
       }
@@ -158,6 +166,7 @@ export const createLayerStore = (
       vedro.dispatch({
         selectedTimeId: timeId,
         revision: vedro.get().revision + 1,
+        lastChangedLayerId: null,
       });
     },
     setRuntime: (id: LayerId, generation: number, runtime: LayerRuntimeState): void => {

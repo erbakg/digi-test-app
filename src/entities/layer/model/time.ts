@@ -18,6 +18,9 @@ export const TIME_POINTS = [
 
 export const DEFAULT_TIME_POINT_ID: TimePointId = TIME_POINTS[0].id;
 
+export const isTimePointId = (value: string): value is TimePointId =>
+  TIME_POINTS.some((timePoint) => timePoint.id === value);
+
 export const getTimePoint = (id: TimePointId): TimePoint => {
   const timePoint = TIME_POINTS.find((item) => item.id === id);
 

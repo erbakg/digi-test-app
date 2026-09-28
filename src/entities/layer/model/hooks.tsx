@@ -1,6 +1,7 @@
 import { createVedro } from "vedro";
 import { type PropsWithChildren } from "react";
 import { layerStore } from "./store";
+import type { LayerStoreSnapshot } from "./store";
 import type { TimePointId } from "./time";
 import type { LayerId, LayerState } from "./types";
 
@@ -27,8 +28,13 @@ export function useLayerState(id: LayerId): LayerState {
   return layer;
 }
 
-export function useLayerStoreRevision(): number {
-  return layerVedro.useSelector((snapshot) => snapshot.revision);
+export type LayerStoreSignal = Pick<LayerStoreSnapshot, "revision" | "lastChangedLayerId">;
+
+export function useLayerStoreSignal(): LayerStoreSignal {
+  return layerVedro.useSelector((snapshot) => ({
+    revision: snapshot.revision,
+    lastChangedLayerId: snapshot.lastChangedLayerId,
+  }));
 }
 
 export function useLayerDataRevision(): number {

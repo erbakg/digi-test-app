@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MapInstance } from "maplibre-gl";
 import { getMock3dObject, getMockGeometry } from "@/entities/layer/api/mockApi";
-import { useLayerStore, useLayerStoreRevision } from "@/entities/layer/model/hooks";
+import { useLayerStore, useLayerStoreSignal } from "@/entities/layer/model/hooks";
 import { getLayerDataPoint, type LayerData, type LayerDefinition, type LayerId } from "@/entities/layer/model/types";
 import type { LayerStoreSnapshot } from "@/entities/layer/model/store";
 
@@ -14,6 +14,22 @@ const THREE_D_OUTLINE_ID = "mock-3d-weather-station-outline";
 
 type MapViewProps = {
   readonly definitions: readonly LayerDefinition[];
+};
+
+type MapRuntimeState = {
+  readonly ready: boolean;
+  readonly error: boolean;
+  readonly sourceCount: number;
+  readonly layerCount: number;
+  readonly has3dLayer: boolean;
+};
+
+const INITIAL_MAP_RUNTIME_STATE: MapRuntimeState = {
+  ready: false,
+  error: false,
+  sourceCount: 0,
+  layerCount: 0,
+  has3dLayer: false,
 };
 
 const getIntensity = (data: LayerData | undefined, timeId: LayerStoreSnapshot["selectedTimeId"]): number => {
@@ -40,11 +56,23 @@ const syncMapLayers = (
   definitions: readonly LayerDefinition[],
   snapshot: LayerStoreSnapshot,
   previousSnapshot: LayerStoreSnapshot | undefined,
+  changedLayerId: LayerId | null,
 ): void => {
   const isInitialSync = previousSnapshot === undefined;
   const timeChanged = isInitialSync || previousSnapshot.selectedTimeId !== snapshot.selectedTimeId;
+  const revisionsSincePrevious = isInitialSync
+    ? 0
+    : snapshot.revision - previousSnapshot.revision;
+  const hasMultipleUpdates = revisionsSincePrevious > 1;
+  const shouldSyncAll = isInitialSync
+    || timeChanged
+    || changedLayerId === null
+    || hasMultipleUpdates;
+  const layersToSync = shouldSyncAll
+    ? definitions
+    : definitions.filter((definition) => definition.id === changedLayerId);
 
-  for (const definition of definitions) {
+  for (const definition of layersToSync) {
     const layerState = snapshot.byId[definition.id];
     const previousLayerState = previousSnapshot?.byId[definition.id];
 
@@ -93,9 +121,9 @@ export function MapView({ definitions }: MapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapInstance | null>(null);
   const mapReadyRef = useRef(false);
-  const [isMapReady, setIsMapReady] = useState(false);
+  const [mapRuntime, setMapRuntime] = useState<MapRuntimeState>(INITIAL_MAP_RUNTIME_STATE);
   const store = useLayerStore();
-  const revision = useLayerStoreRevision();
+  const { revision, lastChangedLayerId } = useLayerStoreSignal();
   const state = store.getSnapshot();
   const latestStateRef = useRef(state);
   const previousStateRef = useRef<LayerStoreSnapshot | undefined>(undefined);
@@ -108,7 +136,7 @@ export function MapView({ definitions }: MapViewProps) {
     }
 
     let isDisposed = false;
-    setIsMapReady(false);
+    setMapRuntime(INITIAL_MAP_RUNTIME_STATE);
 
     void import("maplibre-gl").then((maplibre) => {
       if (isDisposed || mapContainerRef.current === null) {
@@ -198,17 +226,40 @@ export function MapView({ definitions }: MapViewProps) {
         });
 
         mapReadyRef.current = true;
-        syncMapLayers(map, definitions, latestStateRef.current, undefined);
+        syncMapLayers(map, definitions, latestStateRef.current, undefined, null);
         previousStateRef.current = latestStateRef.current;
-        setIsMapReady(true);
+        const sourceCount = definitions.reduce(
+          (count, definition) => count + (map.getSource(MAP_SOURCE_ID(definition.id)) !== undefined ? 1 : 0),
+          0,
+        ) + (map.getSource(THREE_D_SOURCE_ID) !== undefined ? 1 : 0);
+        const layerCount = definitions.reduce(
+          (count, definition) => count
+            + (map.getLayer(MAP_FILL_ID(definition.id)) !== undefined ? 1 : 0)
+            + (map.getLayer(MAP_LINE_ID(definition.id)) !== undefined ? 1 : 0),
+          0,
+        )
+          + (map.getLayer(THREE_D_LAYER_ID) !== undefined ? 1 : 0)
+          + (map.getLayer(THREE_D_OUTLINE_ID) !== undefined ? 1 : 0);
+
+        setMapRuntime({
+          ready: true,
+          error: false,
+          sourceCount,
+          layerCount,
+          has3dLayer: map.getLayer(THREE_D_LAYER_ID) !== undefined,
+        });
       });
+    }).catch(() => {
+      if (!isDisposed) {
+        setMapRuntime({ ...INITIAL_MAP_RUNTIME_STATE, error: true });
+      }
     });
 
     return () => {
       isDisposed = true;
       mapReadyRef.current = false;
       previousStateRef.current = undefined;
-      setIsMapReady(false);
+      setMapRuntime(INITIAL_MAP_RUNTIME_STATE);
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -221,7 +272,7 @@ export function MapView({ definitions }: MapViewProps) {
       return;
     }
 
-    syncMapLayers(map, definitions, state, previousStateRef.current);
+    syncMapLayers(map, definitions, state, previousStateRef.current, lastChangedLayerId);
     previousStateRef.current = state;
   }, [definitions, revision]);
 
@@ -235,9 +286,14 @@ export function MapView({ definitions }: MapViewProps) {
         <span
           className="map-panel__live"
           data-testid="map-status"
-          data-ready={isMapReady ? "true" : "false"}
+          data-ready={mapRuntime.ready ? "true" : "false"}
+          data-error={mapRuntime.error ? "true" : "false"}
+          data-source-count={mapRuntime.sourceCount}
+          data-layer-count={mapRuntime.layerCount}
+          data-has-3d-layer={mapRuntime.has3dLayer ? "true" : "false"}
         >
-          <span aria-hidden="true" /> {isMapReady ? "map ready" : "loading map"}
+          <span aria-hidden="true" />
+          {mapRuntime.error ? "map error" : mapRuntime.ready ? "map ready" : "loading map"}
         </span>
       </div>
       <div className="map-panel__canvas" ref={mapContainerRef} />

@@ -79,6 +79,12 @@ describe("layerStore", () => {
     expect(layerStore.getSnapshot().selectedTimeId).toBe(noon);
   });
 
+  it("rejects an unknown runtime time point", () => {
+    expect(() => layerStore.setSelectedTime(toTimePointId("25:00"))).toThrow(
+      "Unknown time point: 25:00",
+    );
+  });
+
   it("resets selected time together with layer state", () => {
     layerStore.setSelectedTime(toTimePointId("14:00"));
     layerStore.setEnabled(toLayerId("temperature"), true);

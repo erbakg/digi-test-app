@@ -49,6 +49,15 @@ class Scenario(vedro.Scenario):
         await expect(self.page.get_by_test_id("map-status")).to_have_attribute(
             "data-ready", "true"
         )
+        await expect(self.page.get_by_test_id("map-status")).to_have_attribute(
+            "data-source-count", "4"
+        )
+        await expect(self.page.get_by_test_id("map-status")).to_have_attribute(
+            "data-layer-count", "8"
+        )
+        await expect(self.page.get_by_test_id("map-status")).to_have_attribute(
+            "data-has-3d-layer", "true"
+        )
         await expect(self.page.get_by_test_id("map-3d-weather-station")).to_be_visible()
 
     async def when_temperature_is_toggled_quickly(self):
