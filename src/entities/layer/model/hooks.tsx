@@ -15,17 +15,24 @@ export function useLayerStore() {
 }
 
 export function useLayerState(id: LayerId): LayerState {
-  const layer = layerVedro.useSelector((snapshot) => snapshot.byId[id]);
+  const layerVersion = layerVedro.useSelector(
+    (snapshot) => snapshot.byId[id]?.version,
+  );
+  const layer = layerStore.getSnapshot().byId[id];
 
-  if (layer === undefined) {
+  if (layer === undefined || layerVersion === undefined) {
     throw new Error(`Unknown layer: ${id}`);
   }
 
   return layer;
 }
 
-export function useAllLayerState() {
-  return layerVedro.useSelector((snapshot) => snapshot);
+export function useLayerStoreRevision(): number {
+  return layerVedro.useSelector((snapshot) => snapshot.revision);
+}
+
+export function useLayerDataRevision(): number {
+  return layerVedro.useSelector((snapshot) => snapshot.layerRevision);
 }
 
 export function useSelectedTime(): TimePointId {

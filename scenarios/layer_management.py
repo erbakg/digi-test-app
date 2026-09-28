@@ -46,6 +46,9 @@ class Scenario(vedro.Scenario):
         await expect(
             self.page.get_by_test_id("layer-value-temperature")
         ).not_to_have_text(self.temperature_value_before_timeline)
+        await expect(self.page.get_by_test_id("map-status")).to_have_attribute(
+            "data-ready", "true"
+        )
         await expect(self.page.get_by_test_id("map-3d-weather-station")).to_be_visible()
 
     async def when_temperature_is_toggled_quickly(self):
@@ -53,11 +56,14 @@ class Scenario(vedro.Scenario):
         await toggle.click()
         await toggle.click()
         await toggle.click()
+        await toggle.click()
 
-    async def then_stale_request_does_not_reenable_layer(self):
-        await self.page.wait_for_timeout(900)
+    async def then_latest_request_wins_after_quick_toggles(self):
         await expect(self.page.get_by_test_id("layer-status-temperature")).to_have_text(
-            "выключен"
+            "success", timeout=3000
+        )
+        await expect(self.page.get_by_test_id("layer-toggle-temperature")).to_have_attribute(
+            "aria-checked", "true"
         )
 
     async def when_opacity_is_changed(self):

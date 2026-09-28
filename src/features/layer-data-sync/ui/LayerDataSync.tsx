@@ -1,6 +1,6 @@
 import { useQueries } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { useAllLayerState, useLayerStore } from "@/entities/layer/model/hooks";
+import { useLayerDataRevision, useLayerStore } from "@/entities/layer/model/hooks";
 import { layerQueryOptions } from "@/entities/layer/model/queries";
 import type { LayerDefinition, LayerStatus } from "@/entities/layer/model/types";
 
@@ -32,7 +32,8 @@ const getQueryStatus = (
 
 export function LayerDataSync({ definitions }: LayerDataSyncProps) {
   const store = useLayerStore();
-  const snapshot = useAllLayerState();
+  const layerRevision = useLayerDataRevision();
+  const snapshot = store.getSnapshot();
   const queries = useQueries({
     queries: definitions.map((definition) => {
       const layerState = snapshot.byId[definition.id];
@@ -67,13 +68,13 @@ export function LayerDataSync({ definitions }: LayerDataSyncProps) {
           ? undefined
           : "Неизвестная ошибка запроса";
 
-      store.setRuntime(definition.id, {
+      store.setRuntime(definition.id, layerState.requestGeneration, {
         status,
         data: query.data,
         errorMessage,
       });
     });
-  }, [definitions, queries, snapshot, store]);
+  }, [definitions, queries, layerRevision, store]);
 
   return null;
 }

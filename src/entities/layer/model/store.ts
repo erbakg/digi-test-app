@@ -11,6 +11,10 @@ import type {
 export type LayerStoreSnapshot = {
   readonly byId: Readonly<Record<LayerId, LayerState>>;
   readonly selectedTimeId: TimePointId;
+  /** Small signal for consumers that read the latest snapshot imperatively. */
+  readonly revision: number;
+  /** Changes only when a layer control or runtime projection changes. */
+  readonly layerRevision: number;
 };
 
 type LayerUpdater = (current: LayerState) => LayerState;
@@ -22,6 +26,7 @@ const createInitialSnapshot = (
 
   for (const { id } of definitions) {
     byId[id] = {
+      version: 0,
       enabled: false,
       opacity: 0.72,
       requestGeneration: 0,
@@ -34,6 +39,8 @@ const createInitialSnapshot = (
   return {
     byId,
     selectedTimeId: DEFAULT_TIME_POINT_ID,
+    revision: 0,
+    layerRevision: 0,
   };
 };
 
@@ -45,7 +52,11 @@ export type LayerStore = {
   readonly retry: (id: LayerId) => void;
   readonly setOpacity: (id: LayerId, opacity: number) => void;
   readonly setSelectedTime: (timeId: TimePointId) => void;
-  readonly setRuntime: (id: LayerId, runtime: LayerRuntimeState) => void;
+  readonly setRuntime: (
+    id: LayerId,
+    generation: number,
+    runtime: LayerRuntimeState,
+  ) => void;
   readonly reset: () => void;
 };
 
@@ -65,17 +76,24 @@ export const createLayerStore = (
       return;
     }
 
-    const next = updater(current);
+    const updated = updater(current);
 
-    if (next === current) {
+    if (updated === current) {
       return;
     }
+
+    const next: LayerState = {
+      ...updated,
+      version: current.version + 1,
+    };
 
     vedro.dispatch({
       byId: {
         ...snapshot.byId,
         [id]: next,
       },
+      revision: snapshot.revision + 1,
+      layerRevision: snapshot.layerRevision + 1,
     });
   };
 
@@ -137,10 +155,17 @@ export const createLayerStore = (
         return;
       }
 
-      vedro.dispatch({ selectedTimeId: timeId });
+      vedro.dispatch({
+        selectedTimeId: timeId,
+        revision: vedro.get().revision + 1,
+      });
     },
-    setRuntime: (id: LayerId, runtime: LayerRuntimeState): void => {
+    setRuntime: (id: LayerId, generation: number, runtime: LayerRuntimeState): void => {
       updateLayer(id, (current) => {
+        if (current.requestGeneration !== generation) {
+          return current;
+        }
+
         if (
           current.status === runtime.status
           && current.data === runtime.data

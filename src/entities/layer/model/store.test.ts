@@ -32,6 +32,36 @@ describe("layerStore", () => {
     expect(layerStore.getSnapshot().byId[windId]?.enabled).toBe(true);
   });
 
+  it("ignores runtime updates from an obsolete request generation", () => {
+    const temperatureId = toLayerId("temperature");
+
+    layerStore.setEnabled(temperatureId, true);
+    const firstGeneration = layerStore.getSnapshot().byId[temperatureId]?.requestGeneration;
+    layerStore.retry(temperatureId);
+    const latestGeneration = layerStore.getSnapshot().byId[temperatureId]?.requestGeneration;
+
+    if (firstGeneration === undefined || latestGeneration === undefined) {
+      throw new Error("Layer generation was not initialized");
+    }
+
+    layerStore.setRuntime(temperatureId, firstGeneration, {
+      status: "success",
+      data: undefined,
+      errorMessage: undefined,
+    });
+
+    expect(layerStore.getSnapshot().byId[temperatureId]?.requestGeneration).toBe(latestGeneration);
+    expect(layerStore.getSnapshot().byId[temperatureId]?.status).toBe("loading");
+
+    layerStore.setRuntime(temperatureId, latestGeneration, {
+      status: "success",
+      data: undefined,
+      errorMessage: undefined,
+    });
+
+    expect(layerStore.getSnapshot().byId[temperatureId]?.status).toBe("success");
+  });
+
   it("clamps opacity to the valid range", () => {
     const insolationId = toLayerId("insolation");
     layerStore.setOpacity(insolationId, 4);

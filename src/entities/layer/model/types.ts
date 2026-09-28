@@ -21,6 +21,8 @@ export type LayerDefinition = {
 };
 
 export type LayerState = {
+  /** Per-layer signal used by Vedro selectors without serializing layer data. */
+  readonly version: number;
   readonly enabled: boolean;
   readonly opacity: number;
   /** Monotonically increasing generation. It makes every enable/retry a new query. */
