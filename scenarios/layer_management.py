@@ -32,6 +32,22 @@ class Scenario(vedro.Scenario):
         await self.page.get_by_test_id("layer-retry-wind").click()
         await expect(wind_status).to_have_text("success")
 
+    async def when_timeline_moves_to_noon(self):
+        self.temperature_value_before_timeline = await self.page.get_by_test_id(
+            "layer-value-temperature"
+        ).inner_text()
+        await self.page.get_by_test_id("timeline-point-12:00").click()
+
+    async def then_timeline_updates_map_and_chart_state(self):
+        await expect(
+            self.page.get_by_test_id("timeline-point-12:00")
+        ).to_have_attribute("aria-pressed", "true")
+        await expect(self.page.get_by_test_id("chart-selected-time")).to_have_text("12:00")
+        await expect(
+            self.page.get_by_test_id("layer-value-temperature")
+        ).not_to_have_text(self.temperature_value_before_timeline)
+        await expect(self.page.get_by_test_id("map-3d-weather-station")).to_be_visible()
+
     async def when_temperature_is_toggled_quickly(self):
         toggle = self.page.get_by_test_id("layer-toggle-temperature")
         await toggle.click()

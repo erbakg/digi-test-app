@@ -1,9 +1,11 @@
 import Vedro from "vedro";
 import { createLayerDefinitions } from "./config";
+import { DEFAULT_TIME_POINT_ID, type TimePointId } from "./time";
 import type { LayerDefinition, LayerId, LayerState } from "./types";
 
 export type LayerStoreSnapshot = {
   readonly byId: Readonly<Record<LayerId, LayerState>>;
+  readonly selectedTimeId: TimePointId;
 };
 
 type LayerUpdater = (current: LayerState) => LayerState;
@@ -21,7 +23,10 @@ const createInitialSnapshot = (
     };
   }
 
-  return { byId };
+  return {
+    byId,
+    selectedTimeId: DEFAULT_TIME_POINT_ID,
+  };
 };
 
 export type LayerStore = {
@@ -31,6 +36,7 @@ export type LayerStore = {
   readonly setEnabled: (id: LayerId, enabled: boolean) => void;
   readonly retry: (id: LayerId) => void;
   readonly setOpacity: (id: LayerId, opacity: number) => void;
+  readonly setSelectedTime: (timeId: TimePointId) => void;
   readonly reset: () => void;
 };
 
@@ -110,6 +116,13 @@ export const createLayerStore = (
               opacity: safeOpacity,
             },
       );
+    },
+    setSelectedTime: (timeId: TimePointId): void => {
+      if (vedro.get().selectedTimeId === timeId) {
+        return;
+      }
+
+      vedro.dispatch({ selectedTimeId: timeId });
     },
     reset: (): void => {
       vedro.dispatch({ byId: createInitialSnapshot(definitions).byId });

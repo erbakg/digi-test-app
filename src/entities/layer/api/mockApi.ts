@@ -1,4 +1,9 @@
 import type { GeoJsonFeatureCollection } from "@/shared/types/geo";
+import {
+  DEFAULT_TIME_POINT_ID,
+  TIME_POINTS,
+  type TimePointId,
+} from "../model/time";
 import { toLayerId, type LayerData, type LayerId } from "../model/types";
 
 export class MockApiError extends Error {
@@ -25,19 +30,28 @@ const hashLayerId = (id: LayerId): number => {
   return hash;
 };
 
-export const getMockGeometry = (id: LayerId): GeoJsonFeatureCollection => {
+export const getMockGeometry = (
+  id: LayerId,
+  timeId: TimePointId = DEFAULT_TIME_POINT_ID,
+  intensity = 0.5,
+): GeoJsonFeatureCollection => {
   const hash = hashLayerId(id);
-  const longitude = 69.25 + (hash % 12) * 0.055;
-  const latitude = 42.63 + (Math.floor(hash / 12) % 7) * 0.055;
-  const width = 0.16 + (hash % 4) * 0.025;
-  const height = 0.11 + (hash % 3) * 0.02;
+  const timeIndex = Math.max(0, TIME_POINTS.findIndex((point) => point.id === timeId));
+  const drift = Math.sin((hash + timeIndex * 17) / 4) * 0.012;
+  const longitude = 69.25 + (hash % 12) * 0.055 + drift;
+  const latitude = 42.63 + (Math.floor(hash / 12) % 7) * 0.055 + drift;
+  const width = 0.16 + (hash % 4) * 0.025 + intensity * 0.04;
+  const height = 0.11 + (hash % 3) * 0.02 + intensity * 0.03;
 
   return {
     type: "FeatureCollection",
     features: [
       {
         type: "Feature",
-        properties: { intensity: 0.35 + (hash % 50) / 100 },
+        properties: {
+          intensity,
+          time: timeId,
+        },
         geometry: {
           type: "Polygon",
           coordinates: [[
@@ -52,6 +66,26 @@ export const getMockGeometry = (id: LayerId): GeoJsonFeatureCollection => {
     ],
   };
 };
+
+export const getMock3dObject = (): GeoJsonFeatureCollection => ({
+  type: "FeatureCollection",
+  features: [
+    {
+      type: "Feature",
+      properties: { height: 42, name: "weather-station" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [[
+          [69.58, 42.82],
+          [69.605, 42.82],
+          [69.605, 42.845],
+          [69.58, 42.845],
+          [69.58, 42.82],
+        ]],
+      },
+    },
+  ],
+});
 
 const getDemoErrorLayer = (): LayerId | null => {
   if (typeof window === "undefined") {
@@ -75,6 +109,45 @@ const shouldFailOnce = (id: LayerId): boolean => {
 
   window.sessionStorage.setItem(storageKey, "1");
   return true;
+};
+
+const getLayerUnit = (id: LayerId): string => {
+  const isTemperature = id === toLayerId("temperature");
+  const isWind = id === toLayerId("wind");
+
+  return isTemperature ? "°C" : isWind ? "м/с" : "%";
+};
+
+const getLayerValue = (id: LayerId, timeIndex: number): number => {
+  const hash = hashLayerId(id);
+  const wave = Math.sin((hash + timeIndex * 1.35) / 5);
+  const isTemperature = id === toLayerId("temperature");
+  const isWind = id === toLayerId("wind");
+
+  if (isTemperature) {
+    return Number((18 + wave * 4.5 + timeIndex * 0.35).toFixed(1));
+  }
+
+  if (isWind) {
+    return Number((6.4 + wave * 2.2 + timeIndex * 0.15).toFixed(1));
+  }
+
+  return Math.round(58 + wave * 20 + timeIndex * 4 + (hash % 15));
+};
+
+const normalizeValue = (id: LayerId, value: number): number => {
+  const isTemperature = id === toLayerId("temperature");
+  const isWind = id === toLayerId("wind");
+
+  if (isTemperature) {
+    return Math.min(1, Math.max(0, (value - 10) / 20));
+  }
+
+  if (isWind) {
+    return Math.min(1, Math.max(0, value / 12));
+  }
+
+  return Math.min(1, Math.max(0, value / 100));
 };
 
 const waitForResponse = (delay: number, signal: AbortSignal): Promise<void> =>
@@ -110,14 +183,21 @@ export async function fetchLayerData(
     );
   }
 
-  const isTemperature = id === toLayerId("temperature");
-  const isWind = id === toLayerId("wind");
+  const unit = getLayerUnit(id);
+  const series = TIME_POINTS.map((timePoint, timeIndex) => {
+    const value = getLayerValue(id, timeIndex);
+
+    return {
+      timeId: timePoint.id,
+      value,
+      unit,
+      geometry: getMockGeometry(id, timePoint.id, normalizeValue(id, value)),
+    };
+  });
 
   return {
     layerId: id,
-    value: isTemperature ? 18 : isWind ? 6.4 : 45 + (hashLayerId(id) % 45),
-    unit: isTemperature ? "°C" : isWind ? "м/с" : "%",
     loadedAt: new Date().toISOString(),
-    geometry: getMockGeometry(id),
+    series,
   };
 }

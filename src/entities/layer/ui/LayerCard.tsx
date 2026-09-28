@@ -1,7 +1,7 @@
 import { memo, type ChangeEvent, type CSSProperties } from "react";
-import { useLayerStore } from "../model/hooks";
+import { useLayerStore, useSelectedTime } from "../model/hooks";
 import { useLayerQuery } from "../model/queries";
-import type { LayerDefinition } from "../model/types";
+import { getLayerDataPoint, type LayerDefinition } from "../model/types";
 import { StatusPill } from "./StatusPill";
 
 type LayerCardProps = {
@@ -22,12 +22,18 @@ const formatLoadedAt = (value: string | undefined): string => {
 
 export const LayerCard = memo(function LayerCard({ definition }: LayerCardProps) {
   const store = useLayerStore();
+  const selectedTimeId = useSelectedTime();
   const { state, data, error, status } = useLayerQuery(definition.id);
   const isLoading = status === "loading";
   const hasError = status === "error";
   const hasData = data !== undefined;
   const errorMessage = error instanceof Error ? error.message : "Неизвестная ошибка запроса";
   const metadata = hasData ? formatLoadedAt(data.loadedAt) : "ожидание запроса";
+  const selectedPoint = getLayerDataPoint(data, selectedTimeId);
+  const hasSelectedPoint = selectedPoint !== undefined;
+  const selectedValue = hasSelectedPoint
+    ? `${selectedPoint.value} ${selectedPoint.unit}`
+    : "нет данных";
 
   const handleOpacityChange = (event: ChangeEvent<HTMLInputElement>): void => {
     store.setOpacity(definition.id, Number(event.target.value) / 100);
@@ -93,9 +99,12 @@ export const LayerCard = memo(function LayerCard({ definition }: LayerCardProps)
       </div>
 
       <div className="layer-card__footer">
-        <span className="layer-card__meta">
-          {metadata}
-        </span>
+        <div>
+          <strong className="layer-card__value" data-testid={`layer-value-${definition.id}`}>
+            {selectedValue}
+          </strong>
+          <span className="layer-card__meta">{metadata}</span>
+        </div>
         {hasError ? (
           <button
             className="retry-button"

@@ -1,6 +1,7 @@
 import { createVedro } from "vedro";
 import { type PropsWithChildren } from "react";
 import { layerStore } from "./store";
+import type { TimePointId } from "./time";
 import type { LayerId, LayerState } from "./types";
 
 const layerVedro = createVedro(layerStore.vedro);
@@ -25,4 +26,8 @@ export function useLayerState(id: LayerId): LayerState {
 
 export function useAllLayerState() {
   return layerVedro.useSelector((snapshot) => snapshot);
+}
+
+export function useSelectedTime(): TimePointId {
+  return layerVedro.useSelector((snapshot) => snapshot.selectedTimeId);
 }

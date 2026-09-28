@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import type { LayerDefinition } from "@/entities/layer/model/types";
 import { LayerList } from "@/widgets/layer-list/LayerList";
+import { Timeline } from "@/widgets/timeline/Timeline";
 
 const MapView = lazy(() =>
   import("@/widgets/map-view/MapView").then(({ MapView: view }) => ({ default: view })),
@@ -42,6 +43,7 @@ export function LayersPage({
           </Suspense>
         </div>
         <aside className="dashboard-grid__sidebar">
+          <Timeline />
           <LayerList definitions={definitions} />
           <Suspense fallback={<div className="chart-panel chart-panel--loading">Загрузка графика…</div>}>
             <LayerChart />

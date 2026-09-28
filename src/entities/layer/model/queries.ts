@@ -1,24 +1,26 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchLayerData, MockApiError } from "../api/mockApi";
 import { useLayerState } from "./hooks";
-import type { LayerData, LayerId, LayerStatus } from "./types";
+import type { LayerData, LayerId, LayerState, LayerStatus } from "./types";
 
-const layerQueryKey = (id: LayerId, generation: number) =>
+export const layerQueryKey = (id: LayerId, generation: number) =>
   ["map-layer", id, generation] as const;
+
+export const layerQueryOptions = (id: LayerId, state: LayerState) => ({
+  queryKey: layerQueryKey(id, state.requestGeneration),
+  queryFn: ({ signal }: { readonly signal: AbortSignal }) => fetchLayerData(id, signal),
+  enabled: state.enabled,
+  retry: false,
+  staleTime: Infinity,
+  gcTime: 0,
+  refetchOnMount: true,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
+});
 
 export function useLayerQuery(id: LayerId) {
   const state = useLayerState(id);
-  const query = useQuery<LayerData, MockApiError>({
-    queryKey: layerQueryKey(id, state.requestGeneration),
-    queryFn: ({ signal }) => fetchLayerData(id, signal),
-    enabled: state.enabled,
-    retry: false,
-    staleTime: Infinity,
-    gcTime: 0,
-    refetchOnMount: true,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  });
+  const query = useQuery<LayerData, MockApiError>(layerQueryOptions(id, state));
 
   const status: LayerStatus = !state.enabled
     ? "disabled"

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createLayerDefinitions } from "./config";
 import { createLayerStore, layerStore } from "./store";
+import { toTimePointId } from "./time";
 import { toLayerId } from "./types";
 
 describe("layerStore", () => {
@@ -38,6 +39,14 @@ describe("layerStore", () => {
 
     layerStore.setOpacity(insolationId, -2);
     expect(layerStore.getSnapshot().byId[insolationId]?.opacity).toBe(0);
+  });
+
+  it("keeps the selected time in the Vedro application state", () => {
+    const noon = toTimePointId("12:00");
+
+    layerStore.setSelectedTime(noon);
+
+    expect(layerStore.getSnapshot().selectedTimeId).toBe(noon);
   });
 
   it("keeps 120 layer records manageable for bulk updates", () => {
