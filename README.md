@@ -80,7 +80,7 @@ src/
 
 ### Проверка npm vedro
 
-Перед установкой `vedro@1.1.0` был проверен npm metadata и распакованный tarball: лицензия MIT, 27 файлов, около 46 KB, нет runtime-зависимостей, `postinstall`/`install`-скриптов, сетевого или файлового кода в runtime. Изолированный `npm audit` для `vedro` и его peer-зависимости React не нашёл уязвимостей. Общий audit проекта показывает две moderate dev-only уязвимости в Vitest 3 (`@vitest/mocker`, path traversal); production-зависимости чистые, а исправление требует major upgrade Vitest.
+Перед установкой `vedro@1.1.0` был проверен npm metadata и распакованный tarball: лицензия MIT, 27 файлов, около 46 KB, нет runtime-зависимостей, `postinstall`/`install`-скриптов, сетевого или файлового кода в runtime. Изолированный `npm audit` для `vedro` и его peer-зависимости React не нашёл уязвимостей. Позже найденная moderate dev-only уязвимость в Vitest 3 (`@vitest/mocker`, path traversal) исправлена обновлением до `vitest@4.1.11`; peer-зависимость `react-is` для Recharts добавлена явно. Текущий полный `npm audit` проекта: 0 уязвимостей.
 
 ## Race condition
 
